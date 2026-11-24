@@ -1,0 +1,35 @@
+{
+  "pools": [
+    {
+      "url": "127.0.0.1:3334",
+      "user": "YOUR_WALLET_ADDRESS",
+      "pass": "x",
+      "agent": "xmr-rebuild/0.1",
+      "rig-id": null,
+      "tls": false,
+      "tls-verify": true,
+      "keepalive": true
+    }
+  ],
+  "cpu": {
+    "enabled": true,
+    "threads": -1,
+    "huge-pages": true,
+    "jit": true,
+    "hw-aes": true,
+    "mode": "auto",
+    "max-threads-hint": 100
+  },
+  "randomx": {
+    "init-threads": -1,
+    "1gb-pages": false,
+    "v2": false,
+    "secure-jit": false,
+    "msr": false,
+    "msr-restore": true
+  },
+  "print-time": 60,
+  "retries": 5,
+  "retry-pause": 5,
+  "verbose": 1
+}

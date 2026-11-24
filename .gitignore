@@ -1,0 +1,13 @@
+# Build outputs and CMake-generated files
+/build/
+/cmake-build-*/
+/out/
+
+# Local editor/OS files
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+Thumbs.db
+desktop.ini
