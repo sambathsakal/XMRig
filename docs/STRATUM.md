@@ -151,6 +151,24 @@ at a time, sends a single difficulty-1 job (target `ffffffffffffffff`), and logs
 every share as accepted. Because difficulty 1 accepts all hashes, it is useful
 only for plumbing/smoke tests, not for performance measurement.
 
+## Live public-pool preset
+
+`--real` (or `"real": true` in config.json) is applied while parsing, so options
+that follow it can still override the pool URL or thread count. It:
+
+- selects `stratum+ssl://pool.supportxmr.com:443` if the pool is still the local
+  default;
+- adds a `stratum+ssl://` scheme to a bare custom hostname;
+- enables verified TLS on every configured pool;
+- switches RandomX to `fast` (full dataset) and enables huge pages;
+- is finalized after parsing by `finalizeConfig()`, which requires a
+  structurally valid Monero address in `login`, rejects the placeholder wallet,
+  rejects localhost/mock endpoints, rejects `--no-tls-verify`, and rejects
+  `--mode light`.
+
+The address check is structural (95 base58 characters starting with `4` or `8`,
+with an optional `.worker` suffix); the pool performs authoritative validation.
+
 ## TLS
 
 TLS is provided by OpenSSL and is opt-in. Plain TCP stays the default. A pool

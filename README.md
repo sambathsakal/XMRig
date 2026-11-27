@@ -24,6 +24,7 @@ Glue: `src/miner.cpp` (worker pool, jobs, hashrate), `src/config.cpp`,
 Optional additions: `include/xmr/msr_tuner.hpp` and `src/msr_tuner.cpp` for
 opt-in MSR prefetcher tuning.
 Overall design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Visual blueprint: [docs/BLUEPRINT.md](docs/BLUEPRINT.md).
 
 ## Build
 
@@ -39,6 +40,22 @@ cmake --build build --config Release -j
 
 With a multi-config generator on Windows, the executables are in
 `build/Release/` (for example `build\Release\xmr-miner.exe`).
+
+## Run in live public-pool mode
+
+`--real` is the live-pool preset. It selects
+`stratum+ssl://pool.supportxmr.com:443`, forces certificate/hostname verified
+TLS, requires your own Monero wallet address, and uses full-dataset RandomX
+with huge pages. You must supply the wallet with `-u`:
+
+```sh
+./build/xmr-miner --real -u YOUR_MONERO_ADDRESS -t 4 --print-time 60
+```
+
+A worker suffix is allowed, for example `-u YOUR_MONERO_ADDRESS.rig1`. Put `-o`
+after `--real` to choose another public TLS pool; local/mock endpoints are
+rejected. The same preset is available in JSON as `"real": true`. Keep the
+mock-pool smoke test below for safe local experiments.
 
 ## Run a local smoke test
 
@@ -58,11 +75,10 @@ Terminal 2 — mine against it:
 ./build/xmr-miner -o 127.0.0.1:3334 -u test-wallet -t 2 --no-huge-pages --print-time 5
 ```
 
-Then point `-o` at a real Stratum pool and set `-u` to your own wallet.
-Plain TCP (`stratum+tcp://host:port`) is the default. TLS is enabled with a
-`stratum+ssl://`, `stratum+tls://`, `ssl://` or `tls://` URL, or with `--tls`
-/ `"tls": true`. Certificate and hostname verification are on by default;
-`--no-tls-verify` is only for self-signed pools and local tests.
+Outside `--real`, plain TCP (`stratum+tcp://host:port`) remains the default.
+TLS is enabled with a `stratum+ssl://`, `stratum+tls://`, `ssl://` or `tls://`
+URL, or with `--tls` / `"tls": true`. Certificate and hostname verification are
+on by default; `--no-tls-verify` is only for self-signed pools and local tests.
 
 ## Command line
 
@@ -71,6 +87,7 @@ Plain TCP (`stratum+tcp://host:port`) is the default. TLS is enabled with a
 -u, --user WALLET         Wallet / worker name
 -p, --pass PASS           Pool password
 -t, --threads N           Workers (0/-1 = auto)
+    --real                Live public-pool preset (TLS + wallet + full dataset)
     --mode auto|fast|light   RandomX mode
     --config FILE         JSON config (see config.example.json)
     --huge-pages / --no-huge-pages
@@ -97,10 +114,12 @@ ctest --test-dir build --output-on-failure
 
 ## Scope limits and opt-ins
 
-- **TLS is opt-in.** Plain TCP remains the default. OpenSSL is linked directly;
-  SNI and hostname verification are enabled by default. Disable verification
-  only for self-signed local pools. Pool failover and retry pause work on both
-  plain and TLS connections. This is not a production-audited networking stack.
+- **TLS is opt-in outside `--real`.** Plain TCP remains the manual default.
+  OpenSSL is linked directly; SNI and hostname verification are enabled by
+  default. `--real` requires verified TLS and rejects `--no-tls-verify`.
+  Disable verification only for self-signed local pools. Pool failover and
+  retry pause work on both plain and TLS connections. This is not a
+  production-audited networking stack.
 - **MSR tuning is opt-in.** `--msr` / `"randomx.msr": true` applies XMRig-style
   prefetcher presets through WinRing0 on Windows or `/dev/cpu/N/msr` on Linux.
   Original values are restored on exit by default; `--msr-no-restore` disables

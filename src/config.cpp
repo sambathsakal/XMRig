@@ -21,6 +21,72 @@ Config defaultConfig()
 
 namespace {
 
+constexpr const char *kDefaultPoolUrl = "127.0.0.1:3334";
+constexpr const char *kDefaultWallet  = "YOUR_WALLET_ADDRESS";
+constexpr const char *kRealPoolUrl    = "stratum+ssl://pool.supportxmr.com:443";
+
+bool startsWith(const std::string &text, const char *prefix)
+{
+    const std::string p(prefix);
+    return text.compare(0, p.size(), p) == 0;
+}
+
+bool hasTlsPrefix(const std::string &url)
+{
+    return startsWith(url, "stratum+ssl://") || startsWith(url, "stratum+tls://") ||
+           startsWith(url, "ssl://") || startsWith(url, "tls://");
+}
+
+bool hasPlainPrefix(const std::string &url)
+{
+    return startsWith(url, "stratum+tcp://") || startsWith(url, "stratum://") ||
+           startsWith(url, "tcp://");
+}
+
+bool isLoopbackUrl(const std::string &url)
+{
+    const std::string u = lower(url);
+    return u.find("127.0.0.1") != std::string::npos ||
+           u.find("localhost") != std::string::npos ||
+           u.find("[::1]") != std::string::npos;
+}
+
+// Structural check only; the pool performs the authoritative validation.
+// A worker suffix such as wallet.worker1 is allowed.
+bool looksLikeMoneroAddress(const std::string &user)
+{
+    const std::size_t dot = user.find('.');
+    const std::string wallet = dot == std::string::npos ? user : user.substr(0, dot);
+    if (wallet.size() != 95) return false;
+    if (wallet.front() != '4' && wallet.front() != '8') return false;
+
+    const std::string alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    for (const char c : wallet) {
+        if (alphabet.find(c) == std::string::npos) return false;
+    }
+    return true;
+}
+
+void applyRealPreset(Config &config)
+{
+    config.realMode = true;
+    if (config.pools.empty()) config.pools.emplace_back();
+
+    for (PoolConfig &pool : config.pools) {
+        if (pool.url.empty() || pool.url == kDefaultPoolUrl) {
+            pool.url = kRealPoolUrl;
+        }
+        if (!hasTlsPrefix(pool.url) && !hasPlainPrefix(pool.url)) {
+            pool.url = std::string("stratum+ssl://") + pool.url;
+        }
+        pool.tls = true;
+        pool.tlsVerify = true;
+    }
+
+    if (config.mode == "auto") config.mode = "fast";
+    config.hugePages = true;
+}
+
 const json::Value *member(const json::Value &v, const char *key)
 {
     return v.find(key);
@@ -125,6 +191,10 @@ bool loadConfigFile(const std::string &path, Config &config, std::string &error)
     result.retryPause = getIntOr(root, "retry-pause", result.retryPause);
     result.verbose = getIntOr(root, "verbose", result.verbose);
 
+    if (getBoolOr(root, "real", false)) {
+        applyRealPreset(result);
+    }
+
     if (result.mode != "auto" && result.mode != "fast" && result.mode != "light") {
         error = "mode must be auto, fast or light";
         return false;
@@ -191,6 +261,8 @@ bool applyCommandLine(int argc, char **argv, Config &config, std::string &error,
             config.jit = false;
         } else if (arg == "--no-hw-aes") {
             config.hwAes = false;
+        } else if (arg == "--real" || arg == "--real-mode") {
+            applyRealPreset(config);
         } else if (arg == "--rx-v2") {
             config.v2 = true;
         } else if (arg == "--secure-jit") {
@@ -233,6 +305,47 @@ bool applyCommandLine(int argc, char **argv, Config &config, std::string &error,
     return true;
 }
 
+bool finalizeConfig(Config &config, std::string &error)
+{
+    if (!config.realMode) {
+        error.clear();
+        return true;
+    }
+
+    if (config.pools.empty()) {
+        error = "real mode needs at least one pool";
+        return false;
+    }
+
+    for (const PoolConfig &pool : config.pools) {
+        if (pool.user.empty() || pool.user == kDefaultWallet || !looksLikeMoneroAddress(pool.user)) {
+            error = "real mode needs a valid Monero wallet in --user/-u (placeholder not allowed; "
+                    "worker suffixes like .worker are allowed)";
+            return false;
+        }
+        if (!pool.tls && !hasTlsPrefix(pool.url)) {
+            error = "real mode requires TLS: use a stratum+ssl:// URL or --tls";
+            return false;
+        }
+        if (!pool.tlsVerify) {
+            error = "real mode requires TLS certificate verification; remove --no-tls-verify";
+            return false;
+        }
+        if (isLoopbackUrl(pool.url)) {
+            error = "real mode cannot target a local/mock pool; supply a public pool with -o";
+            return false;
+        }
+    }
+
+    if (config.mode == "light") {
+        error = "real mode requires full-dataset RandomX (use --mode fast)";
+        return false;
+    }
+
+    error.clear();
+    return true;
+}
+
 void printHelp()
 {
     std::cout <<
@@ -242,6 +355,7 @@ void printHelp()
         "  -u, --user WALLET       Wallet / worker name\n"
         "  -p, --pass PASS         Pool password (usually x)\n"
         "  -t, --threads N         Worker threads (0 = auto)\n"
+        "      --real              Live pool preset: TLS public pool, wallet required, full dataset\n"
         "      --mode auto|fast|light   RandomX dataset mode\n"
         "      --config FILE       JSON configuration file\n"
         "      --huge-pages        Request large pages (needs OS privilege)\n"

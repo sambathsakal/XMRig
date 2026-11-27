@@ -28,6 +28,7 @@
     "msr": false,
     "msr-restore": true
   },
+  "real": false,
   "print-time": 60,
   "retries": 5,
   "retry-pause": 5,

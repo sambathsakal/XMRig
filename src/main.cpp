@@ -32,6 +32,10 @@ int main(int argc, char **argv)
         printHelp();
         return 0;
     }
+    if (!finalizeConfig(config, error)) {
+        std::cerr << "config error: " << error << std::endl;
+        return 1;
+    }
 
     logLevel().store(config.verbose);
 

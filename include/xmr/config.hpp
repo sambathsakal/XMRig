@@ -40,11 +40,14 @@ struct Config {
     int retryPause = 5;
     int verbose = 1;
     std::string configPath;
+
+    bool realMode = false;            // live public-pool preset (--real)
 };
 
 Config defaultConfig();
 bool loadConfigFile(const std::string &path, Config &config, std::string &error);
 bool applyCommandLine(int argc, char **argv, Config &config, std::string &error, bool &help);
+bool finalizeConfig(Config &config, std::string &error);
 void printHelp();
 
 } // namespace xmr

@@ -1,9 +1,12 @@
 #include "common.hpp"
+#include "config.hpp"
 #include "json.hpp"
 #include "stratum.hpp"
 
 #include <cstring>
 #include <iostream>
+#include <string>
+#include <vector>
 
 using namespace xmr;
 
@@ -11,7 +14,7 @@ namespace {
 
 int failures = 0;
 
-void check(bool condition, const char *message)
+void check(bool condition, const std::string &message)
 {
     if (!condition) {
         std::cerr << "FAIL: " << message << std::endl;
@@ -69,6 +72,36 @@ int main()
     storeLe64(hash.data() + 24, 0x0000000000000010ULL);
     check(hashMeetsTarget(hash.data(), 0x0000000000000020ULL), "hash below target");
     check(!hashMeetsTarget(hash.data(), 0x0000000000000008ULL), "hash above target");
+
+    // --- live public-pool "real" preset ------------------------------------
+    Config real = defaultConfig();
+    const std::string wallet(95, '4');
+    std::vector<char> walletBuffer(wallet.begin(), wallet.end());
+    walletBuffer.push_back('\0');
+    char program[] = "xmr-miner";
+    char realFlag[] = "--real";
+    char userFlag[] = "-u";
+    char *realArgv[] = { program, realFlag, userFlag, walletBuffer.data() };
+    bool help = false;
+    check(applyCommandLine(4, realArgv, real, error, help), "real mode CLI parses");
+    check(real.realMode, "real mode flag is set");
+    check(real.pools[0].url == "stratum+ssl://pool.supportxmr.com:443", "real mode uses public TLS pool");
+    check(real.pools[0].tls && real.pools[0].tlsVerify, "real mode enables verified TLS");
+    check(real.mode == "fast", "real mode uses the full dataset");
+    check(finalizeConfig(real, error), "real mode config validates: " + error);
+
+    Config placeholder = real;
+    placeholder.pools[0].user = "YOUR_WALLET_ADDRESS";
+    check(!finalizeConfig(placeholder, error), "real mode rejects the placeholder wallet");
+
+    Config local = real;
+    local.pools[0].url = "127.0.0.1:3334";
+    local.pools[0].tls = false;
+    check(!finalizeConfig(local, error), "real mode rejects a local/mock pool");
+
+    Config unverified = real;
+    unverified.pools[0].tlsVerify = false;
+    check(!finalizeConfig(unverified, error), "real mode rejects disabled TLS verification");
 
     if (failures == 0) {
         std::cout << "test_core: all checks passed" << std::endl;
